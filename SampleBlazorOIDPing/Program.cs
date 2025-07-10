@@ -16,12 +16,46 @@ builder.Services.AddScoped<IdentityUserAccessor>();
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
 
-builder.Services.AddAuthentication(options =>
+var authBuilder = builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = IdentityConstants.ApplicationScheme;
         options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
-    })
-    .AddIdentityCookies();
+    });
+
+authBuilder.AddIdentityCookies();
+
+authBuilder.AddOpenIdConnect("oidc", options =>
+    {
+        var oidcConfig = builder.Configuration.GetSection("OpenIdConnect");
+        
+        options.Authority = oidcConfig["Authority"] ?? throw new InvalidOperationException("OpenIdConnect:Authority is required");
+        options.ClientId = oidcConfig["ClientId"] ?? throw new InvalidOperationException("OpenIdConnect:ClientId is required");
+        options.ClientSecret = oidcConfig["ClientSecret"] ?? throw new InvalidOperationException("OpenIdConnect:ClientSecret is required");
+        options.ResponseType = oidcConfig["ResponseType"] ?? "code";
+        options.SaveTokens = bool.Parse(oidcConfig["SaveTokens"] ?? "true");
+        options.GetClaimsFromUserInfoEndpoint = bool.Parse(oidcConfig["GetClaimsFromUserInfoEndpoint"] ?? "true");
+        
+        // Add scopes
+        var scopes = oidcConfig["Scope"]?.Split(' ') ?? new[] { "openid", "profile", "email" };
+        options.Scope.Clear();
+        foreach (var scope in scopes)
+        {
+            options.Scope.Add(scope);
+        }
+        
+        // Map claims
+        options.TokenValidationParameters.NameClaimType = "name";
+        options.TokenValidationParameters.RoleClaimType = "role";
+        
+        // Handle events
+        options.Events.OnRemoteFailure = context =>
+        {
+            context.HandleResponse();
+            var errorMessage = context.Failure?.Message ?? "Authentication failed";
+            context.Response.Redirect("/Account/Login?error=" + Uri.EscapeDataString(errorMessage));
+            return Task.CompletedTask;
+        };
+    });
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
