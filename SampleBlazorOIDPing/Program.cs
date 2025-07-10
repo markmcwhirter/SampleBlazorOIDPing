@@ -34,6 +34,7 @@ authBuilder.AddOpenIdConnect("oidc", options =>
         options.ResponseType = oidcConfig["ResponseType"] ?? "code";
         options.SaveTokens = bool.Parse(oidcConfig["SaveTokens"] ?? "true");
         options.GetClaimsFromUserInfoEndpoint = bool.Parse(oidcConfig["GetClaimsFromUserInfoEndpoint"] ?? "true");
+        options.CallbackPath = "/signin-oidc";
         
         // Add scopes
         var scopes = oidcConfig["Scope"]?.Split(' ') ?? new[] { "openid", "profile", "email" };
